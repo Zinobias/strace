@@ -1,2 +1,2 @@
 # strace
-My strace in c++
+My ```strace``` implementation in c++
