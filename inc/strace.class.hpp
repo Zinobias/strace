@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <sys/ptrace.h>
 
 class strace
 {
@@ -9,22 +10,22 @@ class strace
 		strace(int argc, char *const argv[], const  std::string &&paths);
 		strace(const strace& rhs) = default;
 		strace(strace&& rhs) noexcept = default;
-		strace& operator=(const strace& rhs) = default;
-		strace& operator=(const strace&& rhs) noexcept = default;
+		// strace& operator=(const strace& rhs) = default;
+		// strace& operator=(const strace&& rhs) noexcept = default;
 
 		~strace() = default ;
 
 	public:
+		void		exec_and_attach();
 
 	private:
-		void		exec_and_attach();
-		char** 		construct_argv(char *const exec);
+		char** 		construct_argv() ;
 		void        ptrace_wr(__ptrace_request req) const;
 		// bool        is_executable(const char* file_path) const ;
 	
 	private:
 		int								argc;
-		const  std::string	exec_path;
+		const  std::string				exec_path;
 		char *const*					args;
 
 		// Options for supporting the -c flag

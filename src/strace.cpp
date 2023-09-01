@@ -5,7 +5,7 @@
 #include <linux/types.h>
 #include <sys/stat.h>
 #include <wait.h>
-// #include "../inc/strace.class.hpp"
+#include "../inc/strace.class.hpp"
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -72,19 +72,22 @@ const  std::string find_exec(const char* execPath)
         }
     }
     log_exit1("No matching executables found.");
-    exit(1);
+    // exit(1);
 }
 
 int main ( int argc, char* argv[], char *envp[])
 {
     /* We don't handle flags, so any use of flags has undefined behaviour */
     // TODO: Check whether we implement the -p flag. I probably will.
+    // TODO: Parse flags for the bonus.
     if (argc < 2)
         log_exit1("strace: must have PROG [ARGS] or -p PID");
     /* Check if path is absolute or relative */
 	const  std::string	exec_path = find_exec(argv[1]);
     std::cout << "Exec found is: {" << exec_path << "}" << std::endl;
-    // strace s(argc, argv + 1, exec_path);
+    // We pass the arguments without the executables. And adjust argc accordingly.
+    strace s(argc - 2, argv + 2, exec_path);
+    s.exec_and_attach();
     return 0;
 }
 
