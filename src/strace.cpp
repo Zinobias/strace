@@ -55,11 +55,12 @@ static bool        file_is_valid(const char* file_path)
 */
 const  std::string find_exec(const char* execPath)
 {
-    std::string full_path;
     if (execPath[0] == '/')
     {
         /* Path is absolute */
-        return (std::string(execPath));
+        if (file_is_valid(execPath))
+            return (std::string(execPath));
+        log_exit1("No matching executable found.");
     }
     std::vector<std::string> paths = split_path_env();
     for (auto& curPath : paths)
