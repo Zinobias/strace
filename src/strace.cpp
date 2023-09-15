@@ -7,30 +7,30 @@
 #include <wait.h>
 #include "../inc/strace.class.hpp"
 #include <vector>
-
-namespace fs = std::filesystem;
-
-const std::string getCurrentWorkingDir() {
-    return fs::current_path().string();
-}
+#include <limits>
+#include <limits.h>
 
 /* We split the PATH env into multiple paths, in case applicable */
 const std::vector<std::string> split_path_env() 
 {
     std::vector<std::string> paths;
     const char* path_env = getenv("PATH");
-    if (path_env == NULL)
-        paths.push_back(getCurrentWorkingDir());
-    else
+    if (path_env == nullptr)
     {
-        std::string path(path_env);
-        size_t start = 0, end = std::string::npos;
-        do {
-            end = path.find(':', start);
-            paths.push_back(path.substr(start, (end == std::string::npos ? path.length() : end) - start));
-            start = end + 1;
-        } while (end != std::string::npos);
+        char *cw = nullptr;
+        if ((cw = getcwd(nullptr, PATH_MAX)) == nullptr)
+            log_exit1("getcwd error.");
+        paths.push_back(std::string(cw));
+        free(cw);
+        return paths;
     }
+    std::string path(path_env);
+    size_t start = 0, end = std::string::npos;
+    do {
+        end = path.find(':', start);
+        paths.push_back(path.substr(start, (end == std::string::npos ? path.length() : end) - start));
+        start = end + 1;
+    } while (end != std::string::npos);
     return paths;
 }
 
@@ -87,7 +87,7 @@ int main ( int argc, char* argv[], char *envp[])
     std::cout << "Exec found is: {" << exec_path << "}" << std::endl;
     // We pass the arguments without the executables. And adjust argc accordingly.
     strace s(argc - 2, argv + 2, exec_path);
-    s.exec_and_attach();
+    s.start();
     return 0;
 }
 
