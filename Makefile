@@ -3,7 +3,7 @@ CC := clang++
 ifeq ($(PROD), true)
 	CFLAGS := -Werror -Wall -Wextra -std=c++20 -o2
 else
-	CFLAGS := -Werror -Wall -Wextra -std=c++20 -fsanitize=address -fsanitize=thread -D PROD
+	CFLAGS :=  -std=c++20 -fsanitize=address -D PROD
 endif
 
 SRC_DIR := ./src

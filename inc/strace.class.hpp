@@ -5,6 +5,7 @@
 typedef enum state_e {
     attach, next_syscall,
     neutral, inspect_tracee,
+    wait_child,
 }   state_t ;
 
 class strace
@@ -26,7 +27,7 @@ class strace
 	private:
 		char** 		        construct_argv() ;
 		void                ptrace_wr(__ptrace_request req, void* addr, void* data) const;
-        static void         print_gpregs(const user_regs_struct* const regs);
+        static void         print_gpregs(const struct user_regs_struct* const regs);
         void                run_state_machine();
 		// bool        is_executable(const char* file_path) const ;
 	

@@ -21,5 +21,8 @@ void log_and_exit1(const char *msg, const char *filename, int lineNumber) noexce
 #endif
 	std::cerr << "\nernno if applicable: " << strerror(errno);
 	std::cerr << "\nerror: " << msg << std::endl;
+
+    std::string num = std::to_string(lineNumber);
+	std::cerr << "error on line number: " << num << " filename: " << filename;
     exit(1);
 }
