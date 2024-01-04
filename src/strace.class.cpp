@@ -19,6 +19,11 @@
 #include <elf.h>
 #include <assert.h>
 
+// For parsing the syscall headers
+#include <regex>
+#include <fstream>
+#include <iostream>
+
 strace::strace(int argc, char *const argv[], const  std::string &exec_path) :
 	argc(argc), args(argv), exec_path(exec_path) {}
 
@@ -62,25 +67,23 @@ void        strace::run_state_machine()
     siginfo_t               tracee_siginfo;
     bool                    is64bit = true;
     struct iovec            iov;
-    prstatus_t              prstat;
+    // prstatus_t              prstat;
+    struct user_regs_struct general_registers;
 
     /* We prepare the ptrace_options set */
     while (1)
     {
-        std::cout << "test" << std::endl;
         switch (this->state)
         {
             case state_t::attach:
             {
                 /* Takes control of the tracee with PTRACE_SEIZE, then stops the tracee w/ PTRACE_INTERRUPT */
-                std::cout << "test1" << std::endl;
                 ptrace_wr(PTRACE_SEIZE);
                 ptrace_wr(PTRACE_INTERRUPT);
                 /* We use waitpid to wait for the seizing to finish */
                 waitpid(this->pid, nullptr, __WALL);
                 ptrace_wr(PTRACE_SETOPTIONS, nullptr, (int*)ptrace_options);
                 this->state = next_syscall;
-                std::cout << "test2" << std::endl;
                 break ;
             };
             case state_t::next_syscall:
@@ -89,35 +92,29 @@ void        strace::run_state_machine()
                 ptrace_wr(PTRACE_SYSCALL);
                 // this->state = inspect_tracee;
                 this->state = wait_child;
-                std::cout << "test3" << std::endl;
-
                 break ;
             };
             case state_t::inspect_tracee:
             {
-                std::cout << "test3" << std::endl;
-
                 /**
                  * We read the tracee's registers. addr specifies the type of registers to be read.
                 */
                 // NT_PRSTATUS gets the general purpose registers, excluding the floating-point and/or vector registers.
-                iov.iov_base = &prstat;
-                iov.iov_len = sizeof(prstat);
+                iov.iov_base = &general_registers;
+                iov.iov_len = sizeof(general_registers);
                 ptrace_wr(PTRACE_GETREGSET, (void*)NT_PRSTATUS, (void*) &iov);
-                if (sizeof(prstat.pr_reg[0]) == 8)
+                if (sizeof(general_registers) == 8)
                 {
                     is64bit = true;
                 }
-                else if (sizeof(prstat.pr_reg[0]) == 4)
+                else if (sizeof(general_registers) == 4)
                 {
                     is64bit = false;
                 }
-                std::cout << "test4" << std::endl;
-                
-                struct user_regs_struct* registers;
-                registers = (user_regs_struct*)prstat.pr_reg; // The general purpose registers of the process.
+                // struct user_regs_struct* registers;
+                // registers = (user_regs_struct*)prstat.pr_reg; // The general purpose registers of the process.
                 // strace::print_gpregs(registers);
-                std::cout << "Printing RAX[" << registers->rax << "]" <<std::endl;
+                std::cout << "Printing RAX[" << general_registers.orig_rax << "]" <<std::endl;
                 // memcpy(&registers, prstat.pr_reg, sizeof(user_regs_struct));
                 /* We copy a siginfo_t from the tracee to our siginfo struct, to get the signal information */
                 ptrace_wr(PTRACE_GETSIGINFO, nullptr, &tracee_siginfo);
@@ -162,7 +159,7 @@ void        strace::run_state_machine()
                         std::cout << "WIFSTOPPED" << std::endl;
 
                     // stopped. subprocess stopped successfully.
-                    exit(0);
+                    // exit(0);
                 }
                 else
                 {
@@ -181,56 +178,98 @@ void        strace::run_state_machine()
                 /* Default case should never be reached */
             };
         }
-        // int wstatus = -1;
-        // /* We wait for the process to properly stop, to ensure synchronization */
-        // std::cout << "waiting..." << std::endl;
-        
-        // waitpid(this->pid, &wstatus, __WALL);
-
-        // // TODO: Make a nice and clean convenient wrapper for this.
-        // if (wstatus>>8 == (SIGTRAP | PTRACE_EVENT_EXIT<<8))
-        // {
-        //     /* PTRACE_O_TRACEEXIT*/
-        // }
-        // if (wstatus>>8 == (SIGTRAP | (PTRACE_EVENT_FORK<<8)))
-        // {
-        //     /* PTRACE_O_TRACEFORK */
-        // }
-        // if (wstatus>>8 == (SIGTRAP | (PTRACE_EVENT_VFORK<<8)))
-        // {
-        //     /* PTRACE_O_TRACEVFORK */
-        // }
-        // if (wstatus>>8 == (SIGTRAP | (PTRACE_EVENT_EXEC<<8)))
-        // {
-        //     /* PTRACE_O_TRACEEXEC */
-        // }
-        // if (wstatus>>8 == (SIGTRAP | (PTRACE_EVENT_CLONE<<8)))
-        // {
-        //     /* PTRACE_O_TRACECLONE */
-        // }
-        // if (wstatus>>8 == (SIGTRAP | (PTRACE_EVENT_VFORK_DONE<<8)))
-        // {
-        //     /* PTRACE_O_VFORKDONE*/
-        // }
-        // if (WIFSTOPPED(wstatus))
-        // {
-        //         std::cout << "wifstopped" << std::endl;
-
-        //     // stopped. subprocess stopped successfully.
-        //     // exit(0);
-        // }
-        // else
-        // {
-        //     std::cout << "No matching statements" << std::endl;
-
-        //     // Other reasons, probably error territory.
-        //     exit(1);
-        // }
     }
+}
+
+
+void        fill_syscall_map(const char* const& target_file)
+{
+    std::ifstream stream(target_file);
+    // Setup the regular expression.
+    const std::regex pattern(R"(__NR_(\S+)\s+(\d+))");
+    // Create the match object for the regex
+    std::smatch match;
+    if (stream.is_open() == false)
+    {
+        stream.open(target_file);
+        if (stream.is_open() == false)
+            return ;
+    }
+    std::string line;
+    while (std::getline(stream, line))
+    {
+        if (std::regex_match(line, match, pattern))
+        {
+            /**
+             * If the line matches the expression, we want to insert the syscall with the corresponding number into the map.
+             * @match[1] = syscall name.
+             * @match[2] is the syscall number in ascii, therefore we must convert it with stoi.
+             * */ 
+            strace::x64_syscalls.insert({std::stoi(match[2]), match[1]});
+        }
+    }
+    stream.close();
+    return ;
+}
+
+// TODO: Add error messages to init x64 / 86 maps
+// TODO: Change the if branch into a helper function, that takes a reference to the map & of the stream
+
+/**
+ * Finds the x64 header and initializes the syscall map if found.
+ * When not found, leaves the map empty, which is acceptable.
+ * */
+void        strace::init_x64_map()
+{
+    struct stat sbuf;
+    // Set distribution dependent targets, only using default paths.
+    const char * const mint_target = "/usr/include/x86_64-linux-gnu/asm/unistd_64.h";
+    const char * const ubuntu_target = "/usr/include/x86_64-linux-gnu/asm/unistd_64.h";
+
+    if (stat(mint_target, &sbuf) != -1)
+        fill_syscall_map(mint_target);
+    else if (stat(ubuntu_target, &sbuf) != -1)
+        fill_syscall_map(ubuntu_target);
+    /* If no header can be found, we leave the map empty */
+    return ;
+}
+
+/* Finds the x84 header and initializes the syscall map if found */
+void    strace::init_x86_map()
+{
+    struct stat sbuf;
+    // Set distribution dependent targets, only using default paths.
+    const char * const mint_target = "/usr/include/x86_64-linux-gnu/asm/unistd_32.h";
+    const char * const ubuntu_target = "/usr/include/x86_64-linux-gnu/asm/unistd_32.h";
+
+    if (stat(mint_target, &sbuf) != -1)
+        fill_syscall_map(mint_target);
+    else if (stat(ubuntu_target, &sbuf) != -1)
+        fill_syscall_map(ubuntu_target);
+    /* If no header can be found, we leave the map empty */
+    return ;
+}
+
+void         strace::init_syscall_maps()
+{
+    strace::init_x64_map();
+    // strace::init_x86_map();
 }
 
 void		strace::start()
 {
+    if (this->x86_syscalls.empty() == true)
+    {
+        // TODO: Move this.
+        /* x86 syscall map is empty therefore we initialize it */
+
+    }
+    if (this->x64_syscalls.empty() == true)
+    {
+        // TODO: Move this to loop.
+        /* x64 syscall map is empty therefore we initialize it */
+
+    }
 	this->pid = fork();
     if (this->pid == -1)
         log_exit1("Forking failed");
