@@ -24,6 +24,13 @@
 #include <fstream>
 #include <iostream>
 
+/** 
+ * Declaring out static variables.
+*/
+bool                             strace::syscall_map_initialized = false;
+std::map<int, std::string>       strace::x86_syscalls;
+std::map<int, std::string>       strace::x64_syscalls;
+
 strace::strace(int argc, char *const argv[], const  std::string &exec_path) :
 	argc(argc), args(argv), exec_path(exec_path) {}
 
@@ -114,7 +121,11 @@ void        strace::run_state_machine()
                 // struct user_regs_struct* registers;
                 // registers = (user_regs_struct*)prstat.pr_reg; // The general purpose registers of the process.
                 // strace::print_gpregs(registers);
-                std::cout << "Printing RAX[" << general_registers.orig_rax << "]" <<std::endl;
+                // std::cout << "Printing RAX[" << general_registers.orig_rax << "]" <<std::endl;
+
+                std::cout << "Printing RAX[" << strace::x64_syscalls[general_registers.orig_rax] << "]" <<std::endl;
+
+
                 // memcpy(&registers, prstat.pr_reg, sizeof(user_regs_struct));
                 /* We copy a siginfo_t from the tracee to our siginfo struct, to get the signal information */
                 ptrace_wr(PTRACE_GETSIGINFO, nullptr, &tracee_siginfo);
@@ -125,7 +136,7 @@ void        strace::run_state_machine()
             {
                 int wstatus = -1;
                 /* We wait for the process to properly stop, to ensure synchronization */
-                std::cout << "waiting..." << std::endl;
+                // std::cout << "waiting..." << std::endl;
                 
                 waitpid(this->pid, &wstatus, __WALL);
 
@@ -156,14 +167,14 @@ void        strace::run_state_machine()
                 }
                 if (WIFSTOPPED(wstatus))
                 {
-                        std::cout << "WIFSTOPPED" << std::endl;
+                        // std::cout << "WIFSTOPPED" << std::endl;
 
                     // stopped. subprocess stopped successfully.
                     // exit(0);
                 }
                 else
                 {
-                    std::cout << "No matching statements" << std::endl;
+                    // std::cout << "No matching statements" << std::endl;
 
                     // Other reasons, probably error territory.
                     exit(1);
@@ -184,9 +195,10 @@ void        strace::run_state_machine()
 
 void        strace::fill_syscall_map(const char* const& target_file)
 {
+
     std::ifstream stream(target_file);
     // Setup the regular expression.
-    const std::regex pattern(R"(__NR_(\S+)\s+(\d+))");
+    const std::regex pattern(R"(\S+\s+__NR_(\S+)\s+(\d+))");
     // Create the match object for the regex
     std::smatch match;
     if (stream.is_open() == false)
@@ -198,7 +210,7 @@ void        strace::fill_syscall_map(const char* const& target_file)
     std::string line;
     while (std::getline(stream, line))
     {
-        if (std::regex_match(line, match, pattern))
+        if (std::regex_match(line, match, pattern) == true)
         {
             /**
              * If the line matches the expression, we want to insert the syscall with the corresponding number into the map.
@@ -225,7 +237,7 @@ void        strace::init_x64_map()
     // Set distribution dependent targets, only using default paths.
     const char * const mint_target = "/usr/include/x86_64-linux-gnu/asm/unistd_64.h";
     const char * const ubuntu_target = "/usr/include/x86_64-linux-gnu/asm/unistd_64.h";
-
+    std::cout << "initializing 64 map" << std::endl;
     if (stat(mint_target, &sbuf) != -1)
         fill_syscall_map(mint_target);
     else if (stat(ubuntu_target, &sbuf) != -1)
