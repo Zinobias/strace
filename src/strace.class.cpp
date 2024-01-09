@@ -182,7 +182,7 @@ void        strace::run_state_machine()
 }
 
 
-void        fill_syscall_map(const char* const& target_file)
+void        strace::fill_syscall_map(const char* const& target_file)
 {
     std::ifstream stream(target_file);
     // Setup the regular expression.
@@ -254,22 +254,13 @@ void         strace::init_syscall_maps()
 {
     strace::init_x64_map();
     // strace::init_x86_map();
+    strace::syscall_map_initialized = true;
 }
 
 void		strace::start()
 {
-    if (this->x86_syscalls.empty() == true)
-    {
-        // TODO: Move this.
-        /* x86 syscall map is empty therefore we initialize it */
-
-    }
-    if (this->x64_syscalls.empty() == true)
-    {
-        // TODO: Move this to loop.
-        /* x64 syscall map is empty therefore we initialize it */
-
-    }
+    if (syscall_map_initialized == false)
+        init_syscall_maps();
 	this->pid = fork();
     if (this->pid == -1)
         log_exit1("Forking failed");

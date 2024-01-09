@@ -23,7 +23,6 @@ class strace
 
 	public:
 		void		        start();
-        static void         init_syscall_maps();
         /* Initialize the x64 and x86 syscall maps, distribution specific, can fail, which is okay */
 
 	private:
@@ -33,6 +32,8 @@ class strace
         void                run_state_machine();
         static void         init_x64_map();
         static void         init_x86_map();
+        static void         init_syscall_maps();
+        static void         fill_syscall_map(const char* const& target_file);
 
 		// bool        is_executable(const char* file_path) const ;
 	
@@ -50,6 +51,5 @@ class strace
         state_t                                 state /* state of the state machine */;
         static std::map<int, std::string>       x86_syscalls;
         static std::map<int, std::string>       x64_syscalls;
-
-    friend void        fill_syscall_map(const char* const& target_file);
+        static bool                             syscall_map_initialized;
 };
